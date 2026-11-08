@@ -1,6 +1,8 @@
 import fs from 'node:fs/promises';   // лише проміс-версія модуля fs
 import path from 'node:path';
 import { Command } from 'commander';
+import http from 'node:http';
+import { once } from 'node:events';   // перетворює подію на проміс
 
 // Параметри командного рядка
 const program = new Command();
@@ -35,5 +37,68 @@ try {
   await fs.mkdir(cacheDir, { recursive: true });
 } catch (err) {
   console.error(`Не вдалося створити теку кешу: ${err.message}`);
+  process.exit(1);
+}
+
+// Допоміжні функції 
+
+// Надіслати текстову відповідь (для помилок і повідомлень)
+function sendText(res, statusCode, message, extraHeaders = {}) {
+  res.writeHead(statusCode, {
+    'Content-Type': 'text/plain; charset=utf-8',
+    ...extraHeaders,
+  });
+  res.end(message);
+}
+
+// Обробники методів 
+
+
+// Сервер 
+
+// Єдиний дозволений колбек — async-обробник запиту
+const server = http.createServer(async (req, res) => {
+  try {
+    // Дозволені лише GET, PUT, DELETE. Для інших — 405
+    // і заголовок Allow зі списком дозволених методів
+    if (!['GET', 'PUT', 'DELETE'].includes(req.method)) {
+      sendText(res, 405, `Метод ${req.method} не дозволений`, {
+        Allow: 'GET, PUT, DELETE',
+      });
+      return;
+    }
+
+    // Перевірка шляху: рівно три цифри після "/", напр. /200, /418
+    // (так ніхто не зможе передати щось на кшталт /../main.js)
+    const match = req.url.match(/^\/(\d{3})$/);
+    if (!match) {
+      sendText(res, 400, 'Неправильний шлях. Приклад правильного: /200');
+      return;
+    }
+    const code = match[1];
+
+    sendText(res, 501, `Метод ${req.method} ще не реалізовано`);
+  } catch (err) {
+    // Будь-яка неочікувана помилка: відповідаємо 500, сервер працює далі
+    console.error('Помилка сервера:', err);
+    if (!res.headersSent) {
+      sendText(res, 500, 'Внутрішня помилка сервера');
+    } else {
+      res.end();
+    }
+  }
+});
+
+// Значення --host і --port передаємо в listen()
+server.listen(port, options.host);
+
+// once() повертає проміс, який виконується при події 'listening'
+// і відхиляється при події 'error' (напр., порт уже зайнятий)
+try {
+  await once(server, 'listening');
+  console.log(`Сервер запущено: http://${options.host}:${port}`);
+  console.log(`Тека кешу: ${cacheDir}`);
+} catch (err) {
+  console.error(`Не вдалося запустити сервер: ${err.message}`);
   process.exit(1);
 }
