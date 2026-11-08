@@ -139,6 +139,22 @@ async function handlePut(code, req, res) {
   sendText(res, 201, `Картинку для коду ${code} збережено в кеш`);
 }
 
+// DELETE: видаляємо картинку з кешу
+async function handleDelete(code, res) {
+  try {
+    await fs.unlink(getCacheFile(code));
+  } catch (err) {
+    if (err.code === 'ENOENT') {
+      sendText(res, 404, `Картинки для коду ${code} немає в кеші`);
+      return;
+    }
+    throw err;   // інші помилки обробить загальний catch
+  }
+
+  console.log(`DELETE /${code} — видалено`);
+  sendText(res, 200, `Картинку для коду ${code} видалено з кешу`);
+}
+
 //          Сервер 
 
 // Єдиний дозволений колбек — async-обробник запиту
@@ -167,7 +183,7 @@ const server = http.createServer(async (req, res) => {
     } else if (req.method === 'PUT') {
       await handlePut(code, req, res);
     } else {
-      sendText(res, 501, `Метод ${req.method} ще не реалізовано`);
+      await handleDelete(code, res);
     }
 
   } catch (err) {
