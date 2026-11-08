@@ -1,0 +1,25 @@
+{
+  "name": "webback_lab5",
+  "version": "1.0.0",
+  "description": "",
+  "main": "main.js",
+  "scripts": {
+    "start": "node main.js -h 127.0.0.1 -p 3000 -c ./cache"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/hrybyk9/webback_lab5.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "bugs": {
+    "url": "https://github.com/hrybyk9/webback_lab5/issues"
+  },
+  "homepage": "https://github.com/hrybyk9/webback_lab5#readme",
+  "dependencies": {
+    "commander": "^15.1.0",
+    "superagent": "^10.4.2"
+  }
+}
