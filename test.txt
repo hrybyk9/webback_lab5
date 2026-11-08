@@ -16,3 +16,12 @@ curl -s -D - -o /dev/null http://127.0.0.1:3000/200
 curl -i http://127.0.0.1:3000/999
 # 4. Неправильний шлях -> 400
 curl -i http://127.0.0.1:3000/abc
+
+=== PUT ===
+# 5. Записати власну картинку my.jpg для коду 200 -> 201
+curl -i -X PUT --data-binary @my.jpg -H "Content-Type: image/jpeg" http://127.0.0.1:3000/200
+# 6. GET після PUT -> повертається моя картинка (з кешу)
+curl -s -D - -o after_put.jpg http://127.0.0.1:3000/200
+cmp my.jpg after_put.jpg && echo "Файли однакові"
+# 7. PUT з порожнім тілом -> 400
+curl -i -X PUT http://127.0.0.1:3000/201

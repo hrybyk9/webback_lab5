@@ -43,7 +43,7 @@ try {
   process.exit(1);
 }
 
-// Допоміжні функції 
+//    Допоміжні функції 
 
 // Надіслати текстову відповідь (для помилок і повідомлень)
 function sendText(res, statusCode, message, extraHeaders = {}) {
@@ -85,7 +85,18 @@ async function fetchFromHttpCat(code) {
   }
 }
 
-// Обробники методів 
+// Отримати все тіло запиту як Buffer.
+// req — це потік (stream). Через for await читаємо його частинами (chunk)
+// без колбеків, а потім склеюємо всі частини в один Buffer.
+async function readBody(req) {
+  const chunks = [];
+  for await (const chunk of req) {
+    chunks.push(chunk);
+  }
+  return Buffer.concat(chunks);
+}
+
+//      Обробники методів 
 // GET: віддаємо з кешу, а якщо там немає — беремо з http.cat
 async function handleGet(code, res) {
   const file = getCacheFile(code);
@@ -114,7 +125,21 @@ async function handleGet(code, res) {
   sendImage(res, image, 'http.cat');
 }
 
-// Сервер 
+// PUT: записуємо картинку з тіла запиту в кеш (або замінюємо наявну)
+async function handlePut(code, req, res) {
+  const body = await readBody(req);
+
+  if (body.length === 0) {
+    sendText(res, 400, 'Тіло запиту порожнє — надішліть картинку');
+    return;
+  }
+
+  await fs.writeFile(getCacheFile(code), body);
+  console.log(`PUT /${code} — збережено ${body.length} байт`);
+  sendText(res, 201, `Картинку для коду ${code} збережено в кеш`);
+}
+
+//          Сервер 
 
 // Єдиний дозволений колбек — async-обробник запиту
 const server = http.createServer(async (req, res) => {
@@ -139,10 +164,12 @@ const server = http.createServer(async (req, res) => {
 
     if (req.method === 'GET') {
       await handleGet(code, res);
+    } else if (req.method === 'PUT') {
+      await handlePut(code, req, res);
     } else {
       sendText(res, 501, `Метод ${req.method} ще не реалізовано`);
     }
-    
+
   } catch (err) {
     // Будь-яка неочікувана помилка: відповідаємо 500, сервер працює далі
     console.error('Помилка сервера:', err);
