@@ -3,6 +3,9 @@ import path from 'node:path';
 import { Command } from 'commander';
 import http from 'node:http';
 import { once } from 'node:events';   // перетворює подію на проміс
+import superagent from 'superagent';
+
+const SOURCE_URL = 'https://http.cat';
 
 // Параметри командного рядка
 const program = new Command();
@@ -51,8 +54,65 @@ function sendText(res, statusCode, message, extraHeaders = {}) {
   res.end(message);
 }
 
-// Обробники методів 
+// Шлях до файлу картинки в кеші: <тека кешу>/<код>.jpg
+function getCacheFile(code) {
+  return path.join(cacheDir, `${code}.jpg`);
+}
 
+// Надіслати картинку. source — звідки взято картинку: 'cache' або 'http.cat'
+function sendImage(res, image, source) {
+  res.writeHead(200, {
+    'Content-Type': 'image/jpeg',
+    'X-Image-Source': source,   // наш додатковий заголовок
+  });
+  res.end(image);
+}
+
+// Отримати картинку з http.cat.
+// Повертає Buffer з картинкою або null, якщо отримати не вдалося.
+async function fetchFromHttpCat(code) {
+  try {
+    // responseType('blob') — тіло відповіді прийде як Buffer (двійкові дані)
+    const response = await superagent
+      .get(`${SOURCE_URL}/${code}`)
+      .responseType('blob');
+    return response.body;
+  } catch (err) {
+    // superagent відхиляє проміс, якщо статус 4xx/5xx (err.status)
+    // або якщо сталася мережева помилка (тоді err.status немає)
+    console.log(`http.cat: не вдалося отримати ${code} (${err.status ?? err.message})`);
+    return null;
+  }
+}
+
+// Обробники методів 
+// GET: віддаємо з кешу, а якщо там немає — беремо з http.cat
+async function handleGet(code, res) {
+  const file = getCacheFile(code);
+
+  // 1) Пробуємо прочитати картинку з кешу
+  try {
+    const image = await fs.readFile(file);
+    console.log(`GET /${code} — з кешу`);
+    sendImage(res, image, 'cache');
+    return;
+  } catch (err) {
+    // ENOENT = файлу немає — це не помилка, просто йдемо на http.cat
+    if (err.code !== 'ENOENT') throw err;
+  }
+
+  // 2) У кеші немає — запитуємо http.cat
+  const image = await fetchFromHttpCat(code);
+  if (image === null) {
+    sendText(res, 404, `Картинку для коду ${code} не знайдено`);
+    return;
+  }
+
+  // 3) Спочатку зберігаємо в кеш, потім відправляємо клієнту
+  await fs.writeFile(file, image);
+  console.log(`GET /${code} — з http.cat, збережено в кеш`);
+  sendImage(res, image, 'http.cat');
+}
 
 // Сервер 
 
@@ -77,7 +137,12 @@ const server = http.createServer(async (req, res) => {
     }
     const code = match[1];
 
-    sendText(res, 501, `Метод ${req.method} ще не реалізовано`);
+    if (req.method === 'GET') {
+      await handleGet(code, res);
+    } else {
+      sendText(res, 501, `Метод ${req.method} ще не реалізовано`);
+    }
+    
   } catch (err) {
     // Будь-яка неочікувана помилка: відповідаємо 500, сервер працює далі
     console.error('Помилка сервера:', err);
